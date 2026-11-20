@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jogo do galo contra o Claude</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #fbfbf5;
+  --grid: #d6e3ee;
+  --margin-line: #e9a3a3;
+  --pencil: #3b3f45;
+  --pencil-soft: #6b7079;
+  --ink-blue: #1f3a93;
+  --ink-red: #c0392b;
+  --highlight: #fff3a8;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1c2027;
+    --grid: #2a323d;
+    --margin-line: #5a3236;
+    --pencil: #dfe3ea;
+    --pencil-soft: #9aa2ae;
+    --ink-blue: #8fb0ff;
+    --ink-red: #ff8a7a;
+    --highlight: #4a4418;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1c2027;
+  --grid: #2a323d;
+  --margin-line: #5a3236;
+  --pencil: #dfe3ea;
+  --pencil-soft: #9aa2ae;
+  --ink-blue: #8fb0ff;
+  --ink-red: #ff8a7a;
+  --highlight: #4a4418;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+body {
+  margin: 0;
+  min-height: 100%;
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(to right, transparent 46px, var(--margin-line) 46px, var(--margin-line) 48px, transparent 48px),
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px, 22px 22px;
+  color: var(--pencil);
+  font-family: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+main { max-width: 460px; margin: 0 auto; padding: 1.5rem 1.25rem 2.5rem 64px; }
+h1 {
+  font-family: "Caveat", "Comic Sans MS", cursive;
+  font-weight: 700;
+  font-size: 2.75rem;
+  line-height: 1;
+  margin: 0.5rem 0 0.25rem;
+  transform: rotate(-1.5deg);
+  transform-origin: left center;
+}
+.sub { margin: 0 0 1.25rem; color: var(--pencil-soft); font-size: 0.95rem; }
+.sub .x { color: var(--ink-blue); font-weight: 700; }
+.sub .o { color: var(--ink-red); font-weight: 700; }
+.score { display: flex; gap: 1.5rem; margin: 0 0 1rem; font-family: "Caveat", cursive; line-height: 1.1; }
+.score div { display: flex; flex-direction: column; }
+.score span:first-child { font-size: 1rem; color: var(--pencil-soft); font-family: "Atkinson Hyperlegible", system-ui, sans-serif; }
+.score .you strong { color: var(--ink-blue); }
+.score .claude strong { color: var(--ink-red); }
+.score strong { font-weight: 700; font-size: 1.75rem; }
+.board-wrap { position: relative; width: 100%; max-width: 330px; aspect-ratio: 1; }
+.board-wrap svg.lines, .board-wrap svg.marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); }
+.cells button { appearance: none; background: transparent; border: 0; margin: 0; padding: 0; cursor: pointer; border-radius: 10px; }
+.cells button:disabled { cursor: default; }
+.cells button:not(:disabled):hover { background: color-mix(in srgb, var(--highlight) 55%, transparent); }
+.cells button:focus-visible { outline: 2px dashed var(--ink-blue); outline-offset: -6px; }
+.stroke { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.lines .stroke { stroke: var(--pencil); stroke-width: 3.2; opacity: 0.85; }
+.mark-x { stroke: var(--ink-blue); stroke-width: 6; }
+.mark-o { stroke: var(--ink-red); stroke-width: 5.5; }
+.win-line { stroke: var(--pencil); stroke-width: 5; opacity: 0.75; }
+.draw-in { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 0.28s ease-out forwards; }
+.draw-in.second { animation-delay: 0.18s; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .draw-in { animation: none; stroke-dashoffset: 0; } }
+.note { margin: 1.5rem 0 0; min-height: 4.5rem; font-family: "Caveat", "Comic Sans MS", cursive; font-size: 1.6rem; line-height: 1.2; color: var(--ink-red); }
+.note .who { display: block; font-family: "Atkinson Hyperlegible", system-ui, sans-serif; font-size: 0.85rem; color: var(--pencil-soft); margin-bottom: 0.15rem; }
+.status { margin: 0.75rem 0 0; font-size: 0.95rem; }
+.status.warn { color: var(--pencil-soft); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Jogo do galo</h1>
+  <p class="sub">Tu és o <span class="x">X</span>, o Claude é o <span class="o">O</span> e joga pelo conector MCP. Quem começa vai alternando.</p>
+
+  <div class="score" aria-live="polite">
+    <div class="you"><span>Tu</span><strong id="s-you">0</strong></div>
+    <div class="claude"><span>Claude</span><strong id="s-claude">0</strong></div>
+    <div><span>Empates</span><strong id="s-draw">0</strong></div>
+  </div>
+
+  <div class="board-wrap">
+    <svg class="lines" viewBox="0 0 300 300" aria-hidden="true">
+      <path class="stroke" d="M102 8 C 99 80, 104 190, 100 292" />
+      <path class="stroke" d="M199 6 C 202 110, 197 200, 201 294" />
+      <path class="stroke" d="M8 101 C 90 98, 200 104, 292 99" />
+      <path class="stroke" d="M6 200 C 110 203, 190 197, 294 201" />
+    </svg>
+    <svg class="marks" id="marks" viewBox="0 0 300 300" aria-hidden="true"></svg>
+    <div class="cells" id="cells" role="grid" aria-label="Tabuleiro"></div>
+  </div>
+
+  <p class="note" aria-live="polite"><span class="who">Claude</span><span id="note-text">…</span></p>
+  <p class="status" id="status" aria-live="polite"></p>
+</main>
+
+<script>
+(() => {
+  const cellsEl = document.getElementById("cells");
+  const marksEl = document.getElementById("marks");
+  const noteText = document.getElementById("note-text");
+  const statusEl = document.getElementById("status");
+
+  let shownGame = null, drawn = [], winDrawn = false, current = null, sending = false;
+
+  const buttons = [];
+  for (let i = 0; i < 9; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("role", "gridcell");
+    b.addEventListener("click", () => move(i));
+    cellsEl.appendChild(b);
+    buttons.push(b);
+  }
+
+  function cellCenter(i) { return [50 + (i % 3) * 100, 50 + Math.floor(i / 3) * 100]; }
+  function jitter(n) { return (Math.random() - 0.5) * n; }
+  function addPath(d, cls, second) {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", d);
+    p.setAttribute("class", "stroke draw-in " + cls + (second ? " second" : ""));
+    marksEl.appendChild(p);
+    p.style.setProperty("--len", Math.ceil(p.getTotalLength()) + 2);
+  }
+  function drawX(i) {
+    const [cx, cy] = cellCenter(i), r = 28;
+    addPath(`M${cx - r + jitter(4)} ${cy - r + jitter(4)} Q ${cx + jitter(6)} ${cy + jitter(6)} ${cx + r + jitter(4)} ${cy + r + jitter(4)}`, "mark-x");
+    addPath(`M${cx + r + jitter(4)} ${cy - r + jitter(4)} Q ${cx + jitter(6)} ${cy + jitter(6)} ${cx - r + jitter(4)} ${cy + r + jitter(4)}`, "mark-x", true);
+  }
+  function drawO(i) {
+    const [cx, cy] = cellCenter(i), r = 29, start = Math.random() * Math.PI * 2, steps = 28;
+    let d = "";
+    for (let k = 0; k <= steps + 2; k++) {
+      const a = start + (k / steps) * Math.PI * 2, rr = r + Math.sin(a * 2 + start) * 2.5;
+      d += (k === 0 ? "M" : "L") + (cx + Math.cos(a) * rr).toFixed(1) + " " + (cy + Math.sin(a) * rr * 0.94).toFixed(1) + " ";
+    }
+    addPath(d, "mark-o");
+  }
+  function drawWin([a, , c]) {
+    let [x1, y1] = cellCenter(a), [x2, y2] = cellCenter(c);
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), ex = (dx / len) * 38, ey = (dy / len) * 38;
+    x1 -= ex; y1 -= ey; x2 += ex; y2 += ey;
+    addPath(`M${x1} ${y1} Q ${(x1 + x2) / 2 + jitter(10)} ${(y1 + y2) / 2 + jitter(10)} ${x2} ${y2}`, "win-line");
+  }
+
+  const STATUS = {
+    WAITING_FOR_HUMAN: "É a tua vez. Escolhe uma casa.",
+    CLAUDE_TURN: "À espera da jogada do Claude…",
+    X_WON: "Ganhaste. Bem jogado. Pede ao Claude outro jogo.",
+    O_WON: "O Claude ganhou este.",
+    DRAW: "Empate.",
+    EXPIRED: "Jogo expirado por inatividade.",
+  };
+
+  function render(s) {
+    document.getElementById("s-you").textContent = s.score.human;
+    document.getElementById("s-claude").textContent = s.score.claude;
+    document.getElementById("s-draw").textContent = s.score.draws;
+    const g = s.game;
+    current = g;
+    if (!g) {
+      statusEl.textContent = "Ainda não há jogo. Pede ao Claude para chamar start_game.";
+      buttons.forEach((b) => (b.disabled = true));
+      return;
+    }
+    if (g.id !== shownGame) {
+      shownGame = g.id; drawn = Array(9).fill(null); winDrawn = false; marksEl.innerHTML = "";
+      noteText.textContent = g.startedBy === "HUMAN" ? "Começas tu." : "Começo eu.";
+    }
+    g.board.forEach((v, i) => {
+      if (v && !drawn[i]) { drawn[i] = v; v === "X" ? drawX(i) : drawO(i); }
+    });
+    if (g.winLine && !winDrawn) { winDrawn = true; drawWin(g.winLine); }
+    if (g.comment) noteText.textContent = g.comment; // textContent: never parsed as HTML
+    statusEl.textContent = `Jogo ${g.number}. ${STATUS[g.state] || g.state}`;
+    statusEl.classList.remove("warn");
+    buttons.forEach((b, i) => {
+      const v = g.board[i];
+      b.setAttribute("aria-label", `Linha ${Math.floor(i / 3) + 1}, coluna ${(i % 3) + 1}: ${v === "X" ? "X (tu)" : v === "O" ? "O (Claude)" : "vazia"}`);
+      b.disabled = sending || g.state !== "WAITING_FOR_HUMAN" || v !== null;
+    });
+  }
+
+  async function move(i) {
+    if (sending || !current || current.state !== "WAITING_FOR_HUMAN") return;
+    sending = true;
+    try {
+      const res = await fetch("/api/move", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cell: i }) });
+      const body = await res.json();
+      sending = false;
+      if (res.ok) render(body);
+      else { statusEl.textContent = body.message || "Jogada recusada."; statusEl.classList.add("warn"); }
+    } catch {
+      sending = false;
+      statusEl.textContent = "Sem ligação ao servidor local."; statusEl.classList.add("warn");
+    }
+  }
+
+  // ponytail: 1 s polling on loopback; switch to SSE only if latency matters.
+  async function poll() {
+    try {
+      const res = await fetch("/api/state", { cache: "no-store" });
+      if (!sending) render(await res.json());
+    } catch {
+      statusEl.textContent = "Sem ligação ao servidor local (pnpm start)."; statusEl.classList.add("warn");
+    }
+    setTimeout(poll, 1000);
+  }
+  poll();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "mcp-tic-tac-toe",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "secret": "node scripts/secret.ts",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "start:dist": "node --env-file-if-exists=.env dist/src/main.js",
+    "connector-url": "node --env-file-if-exists=.env scripts/connector-url.ts",
+    "report": "node --env-file-if-exists=.env scripts/report.ts",
+    "inspector": "npx -y @modelcontextprotocol/inspector@2.13.0",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}
