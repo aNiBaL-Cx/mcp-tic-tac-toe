@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Jogo do galo contra o Claude</title>
+<title>Tic-tac-toe vs Claude</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
@@ -104,13 +104,13 @@ h1 {
 </head>
 <body>
 <main>
-  <h1>Jogo do galo</h1>
-  <p class="sub">Tu és o <span class="x">X</span>, o Claude é o <span class="o">O</span> e joga pelo conector MCP. Quem começa vai alternando.</p>
+  <h1>Tic-tac-toe</h1>
+  <p class="sub">You are <span class="x">X</span>. Claude is <span class="o">O</span> and plays through the MCP connector. The first player alternates.</p>
 
   <div class="score" aria-live="polite">
-    <div class="you"><span>Tu</span><strong id="s-you">0</strong></div>
+    <div class="you"><span>You</span><strong id="s-you">0</strong></div>
     <div class="claude"><span>Claude</span><strong id="s-claude">0</strong></div>
-    <div><span>Empates</span><strong id="s-draw">0</strong></div>
+    <div><span>Draws</span><strong id="s-draw">0</strong></div>
   </div>
 
   <div class="board-wrap">
@@ -121,7 +121,7 @@ h1 {
       <path class="stroke" d="M6 200 C 110 203, 190 197, 294 201" />
     </svg>
     <svg class="marks" id="marks" viewBox="0 0 300 300" aria-hidden="true"></svg>
-    <div class="cells" id="cells" role="grid" aria-label="Tabuleiro"></div>
+    <div class="cells" id="cells" role="grid" aria-label="Board"></div>
   </div>
 
   <p class="note" aria-live="polite"><span class="who">Claude</span><span id="note-text">…</span></p>
@@ -178,12 +178,12 @@ h1 {
   }
 
   const STATUS = {
-    WAITING_FOR_HUMAN: "É a tua vez. Escolhe uma casa.",
-    CLAUDE_TURN: "À espera da jogada do Claude…",
-    X_WON: "Ganhaste. Bem jogado. Pede ao Claude outro jogo.",
-    O_WON: "O Claude ganhou este.",
-    DRAW: "Empate.",
-    EXPIRED: "Jogo expirado por inatividade.",
+    WAITING_FOR_HUMAN: "Your turn. Pick a cell.",
+    CLAUDE_TURN: "Waiting for Claude…",
+    X_WON: "You won. Well played. Ask Claude for another game.",
+    O_WON: "Claude won this one.",
+    DRAW: "Draw.",
+    EXPIRED: "Game expired after inactivity.",
   };
 
   function render(s) {
@@ -193,24 +193,24 @@ h1 {
     const g = s.game;
     current = g;
     if (!g) {
-      statusEl.textContent = "Ainda não há jogo. Pede ao Claude para chamar start_game.";
+      statusEl.textContent = "No game yet. Ask Claude to call start_game.";
       buttons.forEach((b) => (b.disabled = true));
       return;
     }
     if (g.id !== shownGame) {
       shownGame = g.id; drawn = Array(9).fill(null); winDrawn = false; marksEl.innerHTML = "";
-      noteText.textContent = g.startedBy === "HUMAN" ? "Começas tu." : "Começo eu.";
+      noteText.textContent = g.startedBy === "HUMAN" ? "You start." : "I start.";
     }
     g.board.forEach((v, i) => {
       if (v && !drawn[i]) { drawn[i] = v; v === "X" ? drawX(i) : drawO(i); }
     });
     if (g.winLine && !winDrawn) { winDrawn = true; drawWin(g.winLine); }
     if (g.comment) noteText.textContent = g.comment; // textContent: never parsed as HTML
-    statusEl.textContent = `Jogo ${g.number}. ${STATUS[g.state] || g.state}`;
+    statusEl.textContent = `Game ${g.number}. ${STATUS[g.state] || g.state}`;
     statusEl.classList.remove("warn");
     buttons.forEach((b, i) => {
       const v = g.board[i];
-      b.setAttribute("aria-label", `Linha ${Math.floor(i / 3) + 1}, coluna ${(i % 3) + 1}: ${v === "X" ? "X (tu)" : v === "O" ? "O (Claude)" : "vazia"}`);
+      b.setAttribute("aria-label", `Row ${Math.floor(i / 3) + 1}, column ${(i % 3) + 1}: ${v === "X" ? "X (you)" : v === "O" ? "O (Claude)" : "empty"}`);
       b.disabled = sending || g.state !== "WAITING_FOR_HUMAN" || v !== null;
     });
   }
@@ -223,10 +223,10 @@ h1 {
       const body = await res.json();
       sending = false;
       if (res.ok) render(body);
-      else { statusEl.textContent = body.message || "Jogada recusada."; statusEl.classList.add("warn"); }
+      else { statusEl.textContent = body.message || "Move rejected."; statusEl.classList.add("warn"); }
     } catch {
       sending = false;
-      statusEl.textContent = "Sem ligação ao servidor local."; statusEl.classList.add("warn");
+      statusEl.textContent = "No connection to the local server."; statusEl.classList.add("warn");
     }
   }
 
@@ -236,7 +236,7 @@ h1 {
       const res = await fetch("/api/state", { cache: "no-store" });
       if (!sending) render(await res.json());
     } catch {
-      statusEl.textContent = "Sem ligação ao servidor local (pnpm start)."; statusEl.classList.add("warn");
+      statusEl.textContent = "No connection to the local server (pnpm start)."; statusEl.classList.add("warn");
     }
     setTimeout(poll, 1000);
   }

@@ -37,13 +37,13 @@ export function createMcpServer(store: Store): McpServer {
     return { content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }], isError: !ok };
   }
 
-  const gameId = z.string().min(1).max(64).describe('ID devolvido por start_game');
+  const gameId = z.string().min(1).max(64).describe('ID returned by start_game');
 
   server.registerTool(
     'start_game',
     {
-      title: 'Novo jogo do galo',
-      description: 'Começa um jogo do galo contra um humano. Tu és O. Quem começa alterna entre jogos. Devolve gameId, tabuleiro e regras.',
+      title: 'New tic-tac-toe game',
+      description: 'Starts a tic-tac-toe game against a human. You are O. The first player alternates between games. Returns gameId, board and rules.',
       inputSchema: {},
     },
     () => run('start_game', undefined, () => store.start()),
@@ -52,12 +52,12 @@ export function createMcpServer(store: Store): McpServer {
   server.registerTool(
     'get_board',
     {
-      title: 'Ver tabuleiro',
+      title: 'Get board',
       description:
-        'Devolve tabuleiro, casas livres e de quem é a vez. Com waitSeconds (0-25) espera no servidor até o humano jogar ou o tempo acabar; nunca bloqueia mais do que isso.',
+        'Returns the board, free cells and whose turn it is. With waitSeconds (0-25) it waits on the server until the human moves or the time runs out; it never blocks longer.',
       inputSchema: {
         gameId,
-        waitSeconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).default(0).describe('Espera máxima no servidor, em segundos'),
+        waitSeconds: z.number().int().min(0).max(MAX_WAIT_SECONDS).default(0).describe('Maximum wait on the server, in seconds'),
       },
       annotations: { readOnlyHint: true },
     },
@@ -66,6 +66,7 @@ export function createMcpServer(store: Store): McpServer {
         store.getBoard(gameId); // validate before waiting
         const deadline = Date.now() + waitSeconds * 1000;
         while (store.state(gameId) === 'WAITING_FOR_HUMAN' && Date.now() < deadline && !extra.signal.aborted) await sleep(250);
+        if (extra.signal.aborted) throw new GameError('ABORTED', 'The client cancelled the request while waiting.');
         return store.getBoard(gameId);
       }),
   );
@@ -73,12 +74,12 @@ export function createMcpServer(store: Store): McpServer {
   server.registerTool(
     'play_move',
     {
-      title: 'Jogar',
-      description: 'Joga O numa casa livre (0-8). Só funciona na tua vez. Comentário curto opcional, mostrado ao humano.',
+      title: 'Play move',
+      description: 'Plays O on a free cell (0-8). Only works on your turn. Optional short comment, shown to the human.',
       inputSchema: {
         gameId,
-        cell: z.number().int().min(0).max(8).describe('Casa 0-8, da esquerda para a direita, de cima para baixo'),
-        comment: z.string().trim().max(120).optional().describe('Comentário curto e bem-disposto para o humano'),
+        cell: z.number().int().min(0).max(8).describe('Cell 0-8, left to right, top to bottom'),
+        comment: z.string().trim().max(120).optional().describe('Short, friendly comment for the human'),
       },
     },
     ({ gameId, cell, comment }) => run('play_move', gameId, () => store.play(gameId, cell, comment)),
@@ -130,10 +131,12 @@ function controlHandler(store: Store, port: () => number) {
     // Host check blocks DNS rebinding; Origin check blocks cross-site POSTs from other pages in the browser.
     const origin = req.headers.origin;
     const badOrigin = origin !== undefined && !allowedHosts.map((h) => `http://${h}`).includes(origin);
-    if (!loopback || !allowedHosts.includes(req.headers.host ?? '') || badOrigin) return json(res, 403, { error: 'forbidden' });
+    // A forwarding proxy (e.g. ngrok --host-header=rewrite) can fake Host and loopback, but it adds x-forwarded-for.
+    const forwarded = req.headers['x-forwarded-for'] !== undefined;
+    if (!loopback || forwarded || !allowedHosts.includes(req.headers.host ?? '') || badOrigin) return json(res, 403, { error: 'forbidden' });
 
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     try {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
       if (req.method === 'GET' && url.pathname === '/') {
         return res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(BOARD_HTML);
       }
@@ -145,8 +148,8 @@ function controlHandler(store: Store, port: () => number) {
           body += chunk;
           if (body.length > 256) return json(res, 413, { error: 'too_large' });
         }
-        const { cell } = JSON.parse(body) as { cell?: number };
-        const state = store.humanMove(Number(cell));
+        const { cell } = (JSON.parse(body) ?? {}) as { cell?: unknown };
+        const state = store.humanMove(cell);
         log({ event: 'human_move', gameId: state.game?.id, cell, state: state.game?.state });
         return json(res, 200, state);
       }
@@ -157,7 +160,8 @@ function controlHandler(store: Store, port: () => number) {
     } catch (e) {
       if (e instanceof GameError) return json(res, 409, { code: e.code, message: e.message });
       if (e instanceof SyntaxError) return json(res, 400, { error: 'invalid_json' });
-      throw e;
+      // Malformed URL, escape or body: answer 400 instead of crashing the process.
+      if (!res.headersSent) json(res, 400, { error: 'bad_request' });
     }
   };
 }

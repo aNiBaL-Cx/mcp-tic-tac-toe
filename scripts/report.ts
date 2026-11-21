@@ -11,5 +11,5 @@ if (!res.ok) process.exitCode = 1;
 else if (id) {
   mkdirSync('results', { recursive: true });
   writeFileSync(`results/${body.gameId}.json`, JSON.stringify(body, null, 2) + '\n');
-  console.error(`Guardado em results/${body.gameId}.json`);
+  console.error(`Saved to results/${body.gameId}.json`);
 }

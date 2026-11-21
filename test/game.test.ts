@@ -50,7 +50,7 @@ test('out-of-turn, occupied and invalid cells are rejected without state change'
   const taken = store.play(gameId, 4);
   assert.equal(taken.ok, false);
   assert.equal('code' in taken && taken.code, 'CELL_TAKEN');
-  assert.match(taken.message, /ocupada/);
+  assert.match(taken.message, /is taken/);
   assert.equal(taken.state, 'CLAUDE_TURN');
   store.play(gameId, 0);
   assert.throws(() => store.humanMove(0), code('INVALID_CELL'));
@@ -83,14 +83,14 @@ test('human wait time and summary', () => {
   const { gameId } = store.start();
   t = 5000;
   store.humanMove(4);
-  store.play(gameId, 0, 'Olá!');
+  store.play(gameId, 0, 'Hello!');
   t = 8000;
   store.humanMove(8);
   const s = store.summary(gameId);
   assert.deepEqual(s.humanWaitMs, [5000, 3000]);
   assert.equal(s.result, 'IN_PROGRESS');
   assert.equal(s.results.AUTONOMY_CONFIRMED_MANUALLY, null);
-  assert.ok(!JSON.stringify(s).includes('Olá'), 'summary excludes Claude comments');
+  assert.ok(!JSON.stringify(s).includes('Hello'), 'summary excludes Claude comments');
 });
 
 test('per-game call limit', () => {
@@ -98,4 +98,11 @@ test('per-game call limit', () => {
   const { gameId } = store.start();
   for (let i = 0; i < MAX_CALLS_PER_GAME; i++) store.recordCall(gameId, { tool: 'x', at: 0, durationMs: 0, ok: true });
   assert.throws(() => store.getBoard(gameId), code('CALL_LIMIT'));
+  assert.notEqual(store.start().gameId, gameId, 'a game stuck at the limit does not block a new one');
+});
+
+test('human move rejects non-numeric cells', () => {
+  const store = new Store();
+  store.start();
+  for (const cell of [null, '', [], true, '0']) assert.throws(() => store.humanMove(cell), code('INVALID_CELL'));
 });

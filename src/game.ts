@@ -38,7 +38,6 @@ interface Game {
   waitingSince?: number;
   humanWaitMs: number[];
   invalidMoves: number;
-  getBoardCalls: number;
   calls: CallRecord[];
 }
 
@@ -77,9 +76,9 @@ export class Store {
 
   private get(id: string): Game {
     const g = this.games.get(id);
-    if (!g) throw new GameError('UNKNOWN_GAME', `Jogo "${id}" não existe. Usa start_game.`);
-    if (this.isExpired(g)) throw new GameError('EXPIRED', 'Jogo expirou por inatividade. Usa start_game.');
-    if (g.calls.length >= MAX_CALLS_PER_GAME) throw new GameError('CALL_LIMIT', `Limite de ${MAX_CALLS_PER_GAME} chamadas atingido neste jogo.`);
+    if (!g) throw new GameError('UNKNOWN_GAME', `Game "${id}" does not exist. Call start_game.`);
+    if (this.isExpired(g)) throw new GameError('EXPIRED', 'Game expired after inactivity. Call start_game.');
+    if (g.calls.length >= MAX_CALLS_PER_GAME) throw new GameError('CALL_LIMIT', `Call limit of ${MAX_CALLS_PER_GAME} reached for this game.`);
     return g;
   }
 
@@ -105,15 +104,15 @@ export class Store {
   private message(g: Game): string {
     switch (g.state) {
       case 'CLAUDE_TURN':
-        return 'É a tua vez (O). Chama play_move com uma casa livre.';
+        return 'Your turn (O). Call play_move with a free cell.';
       case 'WAITING_FOR_HUMAN':
-        return 'Vez do humano (X). Chama get_board com waitSeconds 25 até voltar a ser a tua vez. Não precisas de confirmação do utilizador.';
+        return 'Human turn (X). Call get_board with waitSeconds 25 until it is your turn again. You do not need user confirmation.';
       case 'X_WON':
-        return 'O humano (X) ganhou. Jogo terminado.';
+        return 'The human (X) won. Game over.';
       case 'O_WON':
-        return 'Ganhaste (O). Jogo terminado.';
+        return 'You (O) won. Game over.';
       default:
-        return 'Empate. Jogo terminado.';
+        return 'Draw. Game over.';
     }
   }
 
@@ -127,7 +126,7 @@ export class Store {
       state: g.state,
       board: boardText(g.board),
       freeCells: g.board.flatMap((v, i) => (v ? [] : [i])),
-      history: g.history.map((h, n) => `${n + 1}. ${h.who === 'X' ? 'Humano (X)' : 'Claude (O)'} na casa ${h.cell}`),
+      history: g.history.map((h, n) => `${n + 1}. ${h.who === 'X' ? 'Human (X)' : 'Claude (O)'} on cell ${h.cell}`),
       score: this.score(),
       message: this.message(g),
     };
@@ -145,8 +144,9 @@ export class Store {
 
   start() {
     const cur = this.latest();
-    if (cur && !ENDED.includes(cur.state) && !this.isExpired(cur))
-      throw new GameError('GAME_IN_PROGRESS', `O jogo ${cur.id} ainda não terminou. Continua-o com get_board / play_move.`);
+    // A game stuck at the call limit can never end, so it must not block a new one.
+    if (cur && !ENDED.includes(cur.state) && !this.isExpired(cur) && cur.calls.length < MAX_CALLS_PER_GAME)
+      throw new GameError('GAME_IN_PROGRESS', `Game ${cur.id} has not ended. Continue it with get_board / play_move.`);
     const now = this.now();
     const number = this.games.size + 1;
     // Starting player alternates: game 1 human, game 2 Claude, ...
@@ -165,24 +165,22 @@ export class Store {
       waitingSince: startedBy === 'HUMAN' ? now : undefined,
       humanWaitMs: [],
       invalidMoves: 0,
-      getBoardCalls: 0,
       calls: [],
     };
     this.games.set(g.id, g);
     return {
       ...this.view(g),
       rules: [
-        'Jogo do galo 3x3. Tu és O, o humano é X. Casas numeradas 0-8, da esquerda para a direita, de cima para baixo.',
-        'O humano joga num tabuleiro web local; tu jogas com play_move.',
-        'Quando for a vez do humano, chama get_board com waitSeconds 25 repetidamente até ser a tua vez.',
-        'Continua até o jogo terminar, sem pedir confirmação ao utilizador.',
+        'Tic-tac-toe 3x3. You are O, the human is X. Cells are numbered 0-8, left to right, top to bottom.',
+        'The human plays on a local web board; you play with play_move.',
+        'On the human turn, call get_board with waitSeconds 25 repeatedly until it is your turn.',
+        'Keep going until the game ends, without asking the user for confirmation.',
       ],
     };
   }
 
   getBoard(id: string) {
     const g = this.get(id);
-    g.getBoardCalls++;
     if (!ENDED.includes(g.state)) g.lastActivityAt = this.now();
     return this.view(g);
   }
@@ -193,11 +191,11 @@ export class Store {
 
   play(id: string, cell: number, comment = '') {
     const g = this.get(id);
-    if (ENDED.includes(g.state)) throw new GameError('GAME_OVER', 'O jogo já terminou. Usa start_game para outro.');
-    if (g.state !== 'CLAUDE_TURN') throw new GameError('NOT_YOUR_TURN', 'Não é a tua vez: o humano ainda não jogou. Usa get_board com waitSeconds.');
+    if (ENDED.includes(g.state)) throw new GameError('GAME_OVER', 'The game has ended. Call start_game for another one.');
+    if (g.state !== 'CLAUDE_TURN') throw new GameError('NOT_YOUR_TURN', 'Not your turn: the human has not played yet. Call get_board with waitSeconds.');
     if (g.board[cell] !== null) {
       g.invalidMoves++;
-      return { ...this.view(g), ok: false, code: 'CELL_TAKEN', message: `A casa ${cell} já está ocupada. Escolhe uma de freeCells.` };
+      return { ...this.view(g), ok: false, code: 'CELL_TAKEN', message: `Cell ${cell} is taken. Pick one from freeCells.` };
     }
     g.comment = comment;
     this.place(g, cell, 'O');
@@ -205,11 +203,11 @@ export class Store {
   }
 
   /** Human move from the loopback web board. Always applies to the latest game. */
-  humanMove(cell: number) {
+  humanMove(cell: unknown) {
     const g = this.latest();
-    if (!g || this.isExpired(g)) throw new GameError('NO_GAME', 'Não há jogo ativo. Pede ao Claude para chamar start_game.');
-    if (g.state !== 'WAITING_FOR_HUMAN') throw new GameError('NOT_HUMAN_TURN', 'Não é a tua vez.');
-    if (!Number.isInteger(cell) || cell < 0 || cell > 8 || g.board[cell] !== null) throw new GameError('INVALID_CELL', 'Casa inválida.');
+    if (!g || this.isExpired(g)) throw new GameError('NO_GAME', 'No active game. Ask Claude to call start_game.');
+    if (g.state !== 'WAITING_FOR_HUMAN') throw new GameError('NOT_HUMAN_TURN', 'Not your turn.');
+    if (typeof cell !== 'number' || !Number.isInteger(cell) || cell < 0 || cell > 8 || g.board[cell] !== null) throw new GameError('INVALID_CELL', 'Invalid cell.');
     g.humanWaitMs.push(this.now() - (g.waitingSince ?? this.now()));
     this.place(g, cell, 'X');
     return this.boardState();
@@ -251,7 +249,7 @@ export class Store {
   /** Final JSON summary. No secret, no Claude comments. */
   summary(id: string) {
     const g = this.games.get(id);
-    if (!g) throw new GameError('UNKNOWN_GAME', `Jogo "${id}" não existe.`);
+    if (!g) throw new GameError('UNKNOWN_GAME', `Game "${id}" does not exist.`);
     const ended = ENDED.includes(g.state);
     const result = ended ? 'COMPLETED' : this.isExpired(g) ? 'ABANDONED' : 'IN_PROGRESS';
     const end = g.endedAt ?? (result === 'ABANDONED' ? g.lastActivityAt : this.now());
@@ -270,7 +268,6 @@ export class Store {
       finalBoard: boardText(g.board),
       moves: g.history.map((h) => ({ who: h.who, cell: h.cell, at: iso(h.at) })),
       invalidMoves: g.invalidMoves,
-      getBoardCalls: g.getBoardCalls,
       humanWaitMs: g.humanWaitMs,
       totalHumanWaitMs: g.humanWaitMs.reduce((a, b) => a + b, 0),
       calls: {

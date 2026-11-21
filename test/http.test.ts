@@ -35,14 +35,14 @@ const humanMove = (cell: number) =>
   control('/api/move', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ cell }) });
 
 // fetch() cannot override Host/Origin freely, so use node:http.
-function raw(path: string, headers: Record<string, string>, method = 'GET'): Promise<number> {
+function raw(path: string, headers: Record<string, string>, method = 'GET', body = '{"cell":0}'): Promise<number> {
   return new Promise((resolve, reject) =>
     request({ host: '127.0.0.1', port: srv.controlPort, path, method, headers }, (res) => {
       res.resume();
       resolve(res.statusCode ?? 0);
     })
       .on('error', reject)
-      .end(method === 'POST' ? '{"cell":0}' : undefined),
+      .end(method === 'POST' ? body : undefined),
   );
 }
 
@@ -65,11 +65,20 @@ test('MCP requests without the authorized path are rejected', async () => {
 test('control interface: board page served; bad Host, cross-origin and non-JSON moves rejected', async () => {
   const page = await control('/');
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /Jogo do galo/);
+  assert.match(await page.text(), /Tic-tac-toe/);
   const host = `127.0.0.1:${srv.controlPort}`;
   assert.equal(await raw('/api/state', { host: 'evil.example' }), 403);
   assert.equal(await raw('/api/move', { host, origin: 'https://evil.example', 'content-type': 'application/json' }, 'POST'), 403);
   assert.equal(await raw('/api/move', { host, 'content-type': 'text/plain' }, 'POST'), 415);
+  assert.equal(await raw('/api/state', { host, 'x-forwarded-for': '203.0.113.7' }), 403);
+});
+
+test('control interface: malformed requests get 400 and do not crash the server', async () => {
+  const host = `127.0.0.1:${srv.controlPort}`;
+  assert.equal(await raw('//', { host }), 400);
+  assert.equal(await raw('/games/%zz/summary', { host }), 400);
+  assert.equal(await raw('/api/move', { host, 'content-type': 'application/json' }, 'POST', 'null'), 409); // rejected as a game error, not a crash
+  assert.equal((await control('/api/state')).status, 200);
 });
 
 test('full game: human on web board, Claude via MCP, get_board wakes on human move', async () => {

@@ -1,46 +1,53 @@
 # MCP Tic-Tac-Toe
 
-Jogo do galo entre uma pessoa e o Claude Free, para medir se o Claude consegue jogar um jogo inteiro a partir de uma única instrução: fazer as suas jogadas por MCP e esperar sozinho pelas jogadas de uma pessoa real.
+Tic-tac-toe between a person and Claude Free. It measures whether Claude can play a whole game from a single instruction: make its moves through MCP and wait on its own for a real person's moves.
 
-É a continuação do `mcp-prime-challenge`. Em vez de `pnpm human:play`, a pessoa joga num tabuleiro web local. O Claude joga O pelo conector MCP. A pessoa joga X no browser, em `http://127.0.0.1:3334/`.
+Claude plays O through the MCP connector. The person plays X on a local web board at `http://127.0.0.1:3334/`.
 
-Só o endpoint MCP (`/mcp/<secret>`, porta 3333) é exposto via ngrok. O tabuleiro e o `report` ficam na porta de controlo `127.0.0.1:3334`, que nunca é exposta.
+Only the MCP endpoint (`/mcp/<secret>`, port 3333) is exposed through ngrok. The board and `report` live on the control port `127.0.0.1:3334`, which is never exposed.
 
-## Como funciona
+## How it works
 
-- O Claude chama `start_game`. Quem começa alterna: o jogo 1 começa a pessoa, o jogo 2 o Claude, e assim por diante.
-- Na vez da pessoa, o Claude chama `get_board` com `waitSeconds` até 25 s. O servidor espera até a pessoa jogar no browser ou o tempo acabar.
-- Na vez do Claude, ele chama `play_move` com uma casa de 0 a 8 e, opcionalmente, um comentário curto. O comentário aparece no tabuleiro da pessoa.
-- O tabuleiro web consulta `/api/state` a cada segundo e envia as jogadas para `/api/move`.
+- Claude calls `start_game`. The first player alternates: the person starts game 1, Claude starts game 2, and so on.
+- On the person's turn, Claude calls `get_board` with `waitSeconds` up to 25 s. The server waits until the person moves in the browser or the time runs out.
+- On its turn, Claude calls `play_move` with a cell from 0 to 8 and, optionally, a short comment. The comment appears on the person's board.
+- The web board polls `/api/state` every second and sends moves to `/api/move`.
 
-### Ferramentas MCP
+### MCP tools
 
-- `start_game` — sem parâmetros. Devolve `gameId`, tabuleiro, casas livres, regras e placar. Recusa com `GAME_IN_PROGRESS` se o jogo atual ainda não terminou.
-- `get_board(gameId, waitSeconds?)` — só leitura. Devolve tabuleiro, `freeCells`, histórico, estado e mensagem. Não dá dicas de jogada.
-- `play_move(gameId, cell, comment?)` — só em `CLAUDE_TURN`. Uma casa ocupada devolve `CELL_TAKEN` e conta como jogada inválida.
+- `start_game` — no parameters. Returns `gameId`, board, free cells, rules and score. Fails with `GAME_IN_PROGRESS` if the current game has not ended.
+- `get_board(gameId, waitSeconds?)` — read-only. Returns board, `freeCells`, history, state and message. Gives no move hints.
+- `play_move(gameId, cell, comment?)` — only in `CLAUDE_TURN`. A taken cell returns `CELL_TAKEN` and counts as an invalid move.
 
-**Estados:** `CLAUDE_TURN`, `WAITING_FOR_HUMAN`, `X_WON`, `O_WON` e `DRAW`.
+**States:** `CLAUDE_TURN`, `WAITING_FOR_HUMAN`, `X_WON`, `O_WON` and `DRAW`.
 
-**Erros:** `UNKNOWN_GAME`, `EXPIRED`, `GAME_IN_PROGRESS`, `GAME_OVER`, `NOT_YOUR_TURN`, `CELL_TAKEN` e `CALL_LIMIT`.
+**Errors:** `UNKNOWN_GAME`, `EXPIRED`, `GAME_IN_PROGRESS`, `GAME_OVER`, `NOT_YOUR_TURN`, `CELL_TAKEN`, `CALL_LIMIT` and `ABORTED`. `ABORTED` is logged when the client cancels a `get_board` while it waits.
 
-**Limites:**
-- 150 chamadas por jogo.
-- Um jogo ativo de cada vez.
-- Um jogo expira após `GAME_TTL_MINUTES` (60) sem atividade.
-- O estado vive só em memória.
+A game that hits `CALL_LIMIT` can no longer be played, but it does not block `start_game`.
 
-## Setup em macOS
+**Limits:**
+- 150 calls per game.
+- One active game at a time.
+- A game expires after `GAME_TTL_MINUTES` (60) without activity.
+- State lives only in memory.
 
-Requisitos: Node.js ≥ 22.18, pnpm e ngrok. Instala e configura o ngrok como no README do `mcp-prime-challenge`, com `brew install ngrok` e `ngrok config add-authtoken`.
+## Setup on macOS
+
+Requirements: Node.js ≥ 22.18, pnpm and ngrok.
+
+```sh
+brew install ngrok
+ngrok config add-authtoken <your-token>   # free account at ngrok.com
+```
 
 ```sh
 cd mcp-tic-tac-toe
 pnpm install
-pnpm secret            # cria .env com MCP_SECRET; não o imprime
-pnpm start             # MCP em 3333, tabuleiro em 3334
+pnpm secret            # creates .env with MCP_SECRET; does not print it
+pnpm start             # MCP on 3333, board on 3334
 ```
 
-Noutros terminais:
+In other terminals:
 
 ```sh
 ngrok http 3333
@@ -49,75 +56,80 @@ open http://127.0.0.1:3334/
 ```
 
 > [!WARNING]
-> O URL do conector contém o segredo e funciona como password. Não o partilhes e tapa-o em screenshots do terminal, do ngrok e das definições do Claude. Este projeto tem um segredo próprio, diferente do do `mcp-prime-challenge`.
+> The connector URL contains the secret and works as a password. Do not share it, and hide it in screenshots of the terminal, ngrok and Claude settings.
 
-Para verificar localmente, corre `pnpm inspector` (transporte Streamable HTTP, URL local de `pnpm connector-url`) ou `pnpm test`.
+To check locally, run `pnpm inspector` (Streamable HTTP transport, local URL from `pnpm connector-url`) or `pnpm test`.
 
-### Ligar ao Claude Free
+To rotate the secret, delete the `MCP_SECRET` line from `.env`, run `pnpm secret`, restart `pnpm start` and update the connector URL.
 
-1. **Settings → Connectors → Add custom connector**. Usa o nome `Galo` e o URL completo de `pnpm connector-url`.
-2. Em autenticação, escolhe **Sem login**. Não adiciones cabeçalhos.
-3. Nas permissões do conector, põe os dois grupos em **Sempre permitir**. Com "Requer aprovação", cada jogada fica parada à espera de um clique.
-4. Numa conversa nova, ativa **Galo** no menu **+**.
+### Connect Claude Free
 
-O plano Free limita o número de conectores personalizados. Se o `Primos` ainda existir, remove-o primeiro.
+1. Go to **Settings → Connectors → Add custom connector**. Use the name `Galo` and the full URL from `pnpm connector-url`.
+2. For authentication, choose **No login**. Do not add headers.
+3. In the connector permissions, set both groups to **Always allow**. With "Requires approval", every move stops and waits for a click.
+4. In a new conversation, enable **Galo** in the **+** menu.
 
-## Prompt inicial
+The Free plan limits the number of custom connectors.
 
-### Um jogo
+## Initial prompt
 
-```text
-Usa o conector Galo para jogar comigo ao jogo do galo. Chama start_game e joga até o jogo terminar.
-Tu és O. Na tua vez, chama play_move com uma casa livre e um comentário curto e bem-disposto em português de Portugal. Joga bem: se podes ganhar, ganha; se eu ameaço três em linha, bloqueia.
-Na minha vez, chama get_board com waitSeconds 25 repetidamente até voltar a ser a tua vez. Eu jogo no meu tabuleiro, não no chat.
-Não me peças confirmação nem pares entre jogadas. No fim, diz quem ganhou.
-```
-
-### Melhor de três (teste mais longo)
+### One game
 
 ```text
-Usa o conector Galo para jogar comigo uma partida de 3 jogos do galo. Para cada jogo, chama start_game e joga até ao fim; depois começa o seguinte.
-Tu és O. Na tua vez, chama play_move com uma casa livre e um comentário curto e bem-disposto em português de Portugal. Joga bem.
-Na minha vez, chama get_board com waitSeconds 25 repetidamente até voltar a ser a tua vez. Eu jogo no meu tabuleiro, não no chat.
-Não me peças confirmação nem pares entre jogadas ou entre jogos. No fim, mostra o placar.
+Use the Galo connector to play tic-tac-toe with me. Call start_game and play until the game ends.
+You are O. On your turn, call play_move with a free cell and a short, friendly comment. Play well: if you can win, win; if I threaten three in a row, block.
+On my turn, call get_board with waitSeconds 25 repeatedly until it is your turn again. I play on my board, not in the chat.
+Do not ask me for confirmation or stop between moves. At the end, say who won.
 ```
 
-Para medir a paciência do Claude, varia o tempo que demoras a jogar: umas jogadas em 5 s, outras em 1 a 3 min.
+### Best of three (longer test)
 
-## Resultados e QA manual
+```text
+Use the Galo connector to play a 3-game tic-tac-toe match with me. For each game, call start_game and play until the end; then start the next one.
+You are O. On your turn, call play_move with a free cell and a short, friendly comment. Play well.
+On my turn, call get_board with waitSeconds 25 repeatedly until it is your turn again. I play on my board, not in the chat.
+Do not ask me for confirmation or stop between moves or games. At the end, show the score.
+```
+
+A shorter prompt such as "a game" is not enough: in testing, Claude stopped after 3 `get_board` calls and handed the turn back.
+
+To measure Claude's patience, vary how long you take to move: some moves in 5 s, others in 1 to 3 min.
+
+## Results and manual QA
 
 ```sh
-pnpm report            # lista jogos
-pnpm report <gameId>   # resumo JSON, gravado em results/<gameId>.json
+pnpm report            # list games
+pnpm report <gameId>   # JSON summary, saved to results/<gameId>.json
 ```
 
-O bloco `results` tem:
+The `results` block has:
 - `MCP_CONNECTED`
 - `TOOL_EXECUTION_SUCCESS`
 - `GAME_COMPLETED`
-- `AUTONOMY_CONFIRMED_MANUALLY`: sempre `null` no servidor.
+- `AUTONOMY_CONFIRMED_MANUALLY`: always `null` on the server.
 
-O resumo inclui jogadas, jogadas inválidas, chamadas a `get_board`, tempos de espera pela pessoa e o registo de chamadas com duração. Não inclui os comentários do Claude.
+The summary includes moves, invalid moves, human wait times and the call log with durations. `calls.byTool` counts calls per tool, including `get_board`. It does not include Claude's comments.
 
-Regista o QA à mão em `results/<gameId>.qa.json`, com o mesmo formato do `mcp-prime-challenge`. Só marques `AUTONOMY_CONFIRMED_MANUALLY: true` se o jogo terminou depois de uma única instrução, sem prompts extra e sem confirmações pedidas pelo Claude.
+Record the manual QA by hand in `results/<gameId>.qa.json`: date, plan, model, prompt, tool permissions, confirmations asked by Claude, extra human prompts, interruptions, human wait times and `AUTONOMY_CONFIRMED_MANUALLY`. Only set `AUTONOMY_CONFIRMED_MANUALLY: true` if the game ended after a single instruction, with no extra prompts, no tool approvals and no confirmations asked by Claude.
 
-## Segurança
+## Security
 
-- Na porta pública, só `/mcp/<secret>` responde. A comparação do caminho é feita em tempo constante.
-- Os dois servidores fazem bind a `127.0.0.1`.
-- A porta de controlo rejeita pedidos com um `Host` que não seja `127.0.0.1:<porta>` ou `localhost:<porta>`. Isto bloqueia DNS rebinding e pedidos reencaminhados.
-- A porta de controlo também rejeita pedidos com `Origin` de outro site, para que outra página aberta no browser não possa jogar por ti.
-- `/api/move` só aceita `application/json`.
-- O comentário do Claude é mostrado com `textContent`, por isso nunca é interpretado como HTML.
-- Não há ferramentas que executem comandos, leiam ficheiros ou acedam à máquina.
+- On the public port, only `/mcp/<secret>` answers. The path is compared in constant time.
+- Both servers bind to `127.0.0.1`.
+- The control port rejects requests whose `Host` is not `127.0.0.1:<port>` or `localhost:<port>`. This blocks DNS rebinding.
+- The control port also rejects requests with an `x-forwarded-for` header. A proxy such as `ngrok --host-header=rewrite` can fake the `Host` and loopback checks, but it adds this header. Never expose the control port anyway.
+- The control port also rejects requests with an `Origin` from another site, so another page open in the browser cannot play for you.
+- `/api/move` only accepts `application/json`.
+- Claude's comment is shown with `textContent`, so it is never parsed as HTML.
+- No tool runs commands, reads files or accesses the machine.
 
-## Limitações
+## Limitations
 
-- Cada `get_board` espera no máximo 25 s. Uma jogada lenta da pessoa custa várias chamadas, e o limite de chamadas por resposta do claude.ai pode cortar o jogo. É isso que se quer medir.
-- O tabuleiro web consulta o estado a cada segundo, o que basta em loopback.
-- O tabuleiro usa Google Fonts. Sem internet, cai nas fontes do sistema.
-- O estado vive só em memória: reiniciar o servidor perde os jogos e o placar.
-- A única autenticação é o segredo no caminho, sem OAuth.
-- O inspetor local do ngrok (`127.0.0.1:4040`) mostra o caminho com o segredo.
-- No ngrok Free o subdomínio muda a cada arranque. Quando mudar, atualiza o URL do conector.
-- O protocolo MCP `2026-07-28` ainda não é suportado pelo SDK 1.32.2. O Claude tenta-o primeiro, recebe `400` em `server/discover` e passa para `2025-11-25` sem impacto.
+- Each `get_board` waits at most 25 s. A slow human move costs several calls, and the claude.ai per-response tool-call limit may cut the game short. That is what this project measures.
+- The web board polls state every second, which is enough on loopback.
+- The board uses Google Fonts. Offline, it falls back to system fonts.
+- State lives only in memory: restarting the server loses games and score.
+- The only authentication is the secret in the path, with no OAuth.
+- The local ngrok inspector (`127.0.0.1:4040`) shows the path with the secret.
+- On ngrok Free the subdomain changes on every start. When it changes, update the connector URL.
+- MCP protocol `2026-07-28` is not yet supported by SDK 1.32.2. Claude tries it first, gets `400` on `server/discover` and falls back to `2025-11-25` with no impact.

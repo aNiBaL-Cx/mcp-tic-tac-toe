@@ -3,7 +3,7 @@ import { startServers } from './server.ts';
 
 const secret = process.env.MCP_SECRET ?? '';
 if (!/^[A-Za-z0-9_-]{32,}$/.test(secret)) {
-  console.error('MCP_SECRET em falta ou fraco (mínimo 32 caracteres [A-Za-z0-9_-]). Corra: pnpm secret');
+  console.error('MCP_SECRET missing or weak (at least 32 characters of [A-Za-z0-9_-]). Run: pnpm secret');
   process.exit(1);
 }
 
@@ -15,6 +15,6 @@ const { port, controlPort } = await startServers({
   controlPort: Number(process.env.CONTROL_PORT ?? 3334),
 });
 
-console.log(`MCP endpoint:     http://127.0.0.1:${port}/mcp/<secret>   (exponha só esta porta: ngrok http ${port})`);
-console.log(`Tabuleiro humano: http://127.0.0.1:${controlPort}/   (só local, nunca expor)`);
-console.log('URL completo do conector: pnpm connector-url');
+console.log(`MCP endpoint:     http://127.0.0.1:${port}/mcp/<secret>   (expose only this port: ngrok http ${port})`);
+console.log(`Human board:      http://127.0.0.1:${controlPort}/   (local only, never expose)`);
+console.log('Full connector URL: pnpm connector-url');
